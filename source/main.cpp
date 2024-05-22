@@ -112,8 +112,8 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
 	ComputeProgram result;
 
 	// this is setting the budget for our descriptor pool, which is fixed ahead of time based on how many descriptor sets
-	// we will have in flight at any point in time
-	// You can share them across compute shaders 
+	// we will have in flight at any point in time. You can have one descriptor pool shared across multiple descriptor sets but
+	// that would have complicated the example too much
 
 	static constexpr VkDescriptorPoolSize descriptor_pool_sizes[] {
 		{ .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1 },
