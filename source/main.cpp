@@ -220,7 +220,7 @@ void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCom
         {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = descriptor_set,
-            .dstBinding =1,
+            .dstBinding = 1,
             .dstArrayElement = 0,
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
@@ -340,10 +340,11 @@ int main(int argc, char* argv[]) {
     };
 
     std::printf("Begin compute job\n");
-    assert(vkQueueSubmit(*device.get_queue(vkb::QueueType::compute), 1, &submit_info, VK_NULL_HANDLE) == VK_SUCCESS);
-    std::printf("Finished compute job\n");
 
+    assert(vkQueueSubmit(*device.get_queue(vkb::QueueType::compute), 1, &submit_info, VK_NULL_HANDLE) == VK_SUCCESS);
     vkQueueWaitIdle(*device.get_queue(vkb::QueueType::compute));
+
+    std::printf("Finished compute job\n");
 
     // print a bit of the middle so we can see if it did anything
     for (size_t n = 1000; n < 1000+32; ++n) {
