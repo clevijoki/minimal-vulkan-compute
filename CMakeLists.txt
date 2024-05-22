@@ -8,14 +8,14 @@ find_package(VulkanMemoryAllocator CONFIG REQUIRED)
 find_package(vk-bootstrap CONFIG REQUIRED)
 
 add_executable(main
-	source/main.cpp
-	source/vma.cpp
+    source/main.cpp
+    source/vma.cpp
 )
 target_link_libraries(main PRIVATE Vulkan::Vulkan vk-bootstrap::vk-bootstrap GPUOpen::VulkanMemoryAllocator)
 set_target_properties(main PROPERTIES GLOBAL PROPERTY CXX_STANDARD 20)
 
 if (MSVC)
-	target_compile_definitions(main PRIVATE -D_CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(main PRIVATE -D_CRT_SECURE_NO_WARNINGS)
 endif()
 
 add_custom_command(
