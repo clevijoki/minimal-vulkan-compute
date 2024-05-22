@@ -10,22 +10,17 @@
 #define UNIQUE_NAME(name, line) UNIQUE_NAME2(name, line)
 
 struct DeferCreator {
-	static DeferCreator creator() {
-		return {};
-	}
+	static DeferCreator creator() { return {}; }
 
 	template<typename T>
-	struct DeferCall {
+	struct Call {
 		T call;
-		~DeferCall() {
+		~Call() {
 			call();
 		}
 	};
 
-	template<typename T>
-	DeferCall<T> operator +(T call) {
-		return DeferCall<T>{call};
-	}
+	template<typename T> Call<T> operator +(T call) { return Call<T>{call}; }
 };
 
 // cleanup is handled with this which will run the call on scope end
@@ -53,7 +48,6 @@ VkShaderModule LoadShaderModule(VkDevice device, const char* filename) {
 }
 
 struct Buffer {
-
 	const VmaAllocator vma_allocator;
 	VkBuffer buffer;
 	VmaAllocation allocation;
@@ -92,9 +86,7 @@ struct Buffer {
 };
 
 struct ComputeProgram {
-
 	VkDescriptorPool descriptor_pool;
-
 	VkDescriptorSetLayout descriptor_set_layout;
 	VkPipeline pipeline;
 	VkPipelineLayout pipeline_layout;
@@ -108,7 +100,6 @@ void DestroyComputeProgram(ComputeProgram& program, VkDevice device) {
 }
 
 ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
-
 	ComputeProgram result;
 
 	// this is setting the budget for our descriptor pool, which is fixed ahead of time based on how many descriptor sets
@@ -187,7 +178,6 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
 }
 
 void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCommandBuffer command_buffer, const Buffer &constants_buffer, const Buffer &input_buffer, const Buffer &output_buffer, uint32_t work_size) {
-
 	// setup the inputs for the pipeline to point to the buffers we created above
     const VkDescriptorSetAllocateInfo descriptor_set_allocate_info {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
@@ -255,7 +245,6 @@ void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCom
 }
 
 int main(int argc, char* argv[]) {
-
 	// Use vk-bootstrap to setup our device to save some typing. Leaving out error checking for compactness as it asserts internally anyway
 	vkb::Instance instance = vkb::InstanceBuilder()
 		.set_app_name("Vulkan Compute Example")
