@@ -1,5 +1,5 @@
 # minimal-vulkan-compute
-An example program showing how to get started using compute in Vulkan. This is intended for people who might want to 
+An example program showing how to get started using compute in Vulkan. This is intended for people who might want to mess around with compute without having to first figure out how the polygon sausage is made.
 
 It uses:
 
