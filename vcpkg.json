@@ -1,0 +1,8 @@
+{
+  "dependencies": [
+    "shaderc",
+    "vk-bootstrap",
+    "vulkan",
+    "vulkan-memory-allocator"
+  ]
+}

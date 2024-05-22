@@ -1,0 +1,17 @@
+{
+	"folders":
+	[
+		{
+			"path": "."
+		}
+	],
+	"build_systems":
+	[
+		{
+			"name": "Debug",
+			"shell_cmd": "cmake --build build\\debug",
+			"working_dir": "$project_path",
+			"file_regex": "^(.*)[\\(:](\\d+)\\)?: (.*)"
+		}
+	],	
+}

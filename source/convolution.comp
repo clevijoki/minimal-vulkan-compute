@@ -1,0 +1,71 @@
+#version 450 core
+// convolution.comp
+
+layout(binding = 0) uniform readonly Constants {
+	vec4 convolution[4];
+};
+
+layout(binding = 1) readonly buffer Inputs {
+
+	float inputs[];
+};
+
+layout(binding = 2) writeonly buffer Outputs {
+	float outputs[];
+};
+
+layout(local_size_x = 64) in;
+
+float convolution_value(int idx) {
+	vec4 res = convolution[idx/4];
+	if ((idx % 4) == 0) {
+		return res.x;
+	} else if ((idx % 4 == 1)) {
+		return res.y;
+	} else if ((idx % 4 == 2)) {
+		return res.z;
+	} else {
+		return res.w;
+	}
+}
+
+void main() {
+
+	vec4 value = vec4(0.0);
+
+	if (gl_GlobalInvocationID.x < 16) {
+		for (int idx = 0; idx < 4; idx ++) {
+
+			const int read_index0 = int(gl_GlobalInvocationID.x-16+idx*4);
+			const int read_index1 = read_index0 + 1;
+			const int read_index2 = read_index1 + 1;
+			const int read_index3 = read_index2 + 1;
+
+			const vec4 src = vec4(
+				read_index0 < 0 ? 0.0 : inputs[read_index0],
+				read_index1 < 0 ? 0.0 : inputs[read_index1],
+				read_index2 < 0 ? 0.0 : inputs[read_index2],
+				read_index3 < 0 ? 0.0 : inputs[read_index3]
+			);
+
+			value += src * convolution[idx];
+		}		
+	} else {
+
+		for (int idx = 0; idx < 4; idx ++) {
+
+			const int read_index = int(gl_GlobalInvocationID.x-16+idx*4);
+
+			const vec4 src = vec4(
+				inputs[read_index+0],
+				inputs[read_index+1],
+				inputs[read_index+2],
+				inputs[read_index+3]
+			);
+
+			value += src * convolution[idx];
+		}
+	}
+
+	outputs[gl_GlobalInvocationID.x] = value.x + value.y + value.z + value.w;
+}
