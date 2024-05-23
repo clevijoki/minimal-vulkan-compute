@@ -20,7 +20,9 @@ struct DeferCreator {
         }
     };
 
-    template<typename T> Call<T> operator +(T call) { return Call<T>{call}; }
+    template<typename T> Call<T> operator +(T call) {
+        return Call<T>{call};
+    }
 };
 
 // cleanup is handled with this which will run the call on scope end
@@ -31,7 +33,6 @@ struct DeferCreator {
 #else
 #   define VK_ASSERT(x) assert((x) == VK_SUCCESS)
 #endif
-
 
 VkShaderModule LoadShaderModule(VkDevice device, const char* filename) {
     FILE *fp = std::fopen(filename, "rb");
