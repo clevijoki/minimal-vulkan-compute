@@ -5,13 +5,13 @@
 #include <cstdio>
 #include <cassert>
 #include <random>
+#include <vector>
+#include <chrono>
 
 #define UNIQUE_NAME2(name, line) name##line
 #define UNIQUE_NAME(name, line) UNIQUE_NAME2(name, line)
 
 struct DeferCreator {
-    static DeferCreator creator() { return {}; }
-
     template<typename T>
     struct Call {
         T call;
@@ -24,7 +24,14 @@ struct DeferCreator {
 };
 
 // cleanup is handled with this which will run the call on scope end
-#define DEFER auto UNIQUE_NAME(defer_creator_, __LINE__) = DeferCreator::creator() + [&]()
+#define DEFER auto UNIQUE_NAME(defer_creator_, __LINE__) = DeferCreator() + [&]()
+
+#if NDEBUG
+#   define VK_ASSERT(x) x
+#else
+#   define VK_ASSERT(x) assert((x) == VK_SUCCESS)
+#endif
+
 
 VkShaderModule LoadShaderModule(VkDevice device, const char* filename) {
     FILE *fp = std::fopen(filename, "rb");
@@ -42,8 +49,8 @@ VkShaderModule LoadShaderModule(VkDevice device, const char* filename) {
         .pCode = reinterpret_cast<uint32_t*>(bytes.data())
     };
 
-    VkShaderModule result;
-    assert(vkCreateShaderModule(device, &shader_module_create_info, nullptr, &result) == VK_SUCCESS);
+    VkShaderModule result{};
+    VK_ASSERT(vkCreateShaderModule(device, &shader_module_create_info, nullptr, &result));
     return result;
 }
 
@@ -67,8 +74,7 @@ void CreateBufferHelper(VmaAllocator vma_allocator, size_t size, VkBufferUsageFl
 
     VmaAllocationInfo device_allocation_info {};
 
-    auto vk_result = vmaCreateBuffer(vma_allocator, &buffer_create_info, &vma_allocation_create_info, &buffer, &allocation, &device_allocation_info);
-    assert(vk_result == VK_SUCCESS);
+    VK_ASSERT(vmaCreateBuffer(vma_allocator, &buffer_create_info, &vma_allocation_create_info, &buffer, &allocation, &device_allocation_info));
 
     VkMemoryPropertyFlags memory_property_flags {};
     vmaGetAllocationMemoryProperties(vma_allocator, allocation, &memory_property_flags);
@@ -136,7 +142,7 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
         .poolSizeCount = uint32_t(std::size(descriptor_pool_sizes)),
         .pPoolSizes = descriptor_pool_sizes,
     };
-    assert(vkCreateDescriptorPool(device, &descriptor_pool_create_info, nullptr, &result.descriptor_pool) == VK_SUCCESS);
+    VK_ASSERT(vkCreateDescriptorPool(device, &descriptor_pool_create_info, nullptr, &result.descriptor_pool));
 
     // Load our shader, this was compiled from convolution.comp using glslc in the cmake file
     VkShaderModule convolution_shader_module = LoadShaderModule(device, filename);
@@ -166,7 +172,7 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
         .pBindings = descriptor_set_layout_bindings
     };
 
-    assert(vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, nullptr, &result.descriptor_set_layout) == VK_SUCCESS);
+    VK_ASSERT(vkCreateDescriptorSetLayout(device, &descriptor_set_layout_create_info, nullptr, &result.descriptor_set_layout));
 
     // Create the pipeline layout, which is a collection of set layouts that we use
     const VkPipelineLayoutCreateInfo pipeline_layout_create_info {
@@ -175,7 +181,7 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
         .pSetLayouts = &result.descriptor_set_layout
     };
 
-    assert(vkCreatePipelineLayout(device, &pipeline_layout_create_info, nullptr, &result.pipeline_layout) == VK_SUCCESS);
+    VK_ASSERT(vkCreatePipelineLayout(device, &pipeline_layout_create_info, nullptr, &result.pipeline_layout));
 
     // Create the compute pipeline
 
@@ -190,7 +196,7 @@ ComputeProgram CreateConvolutionProgram(VkDevice device, const char* filename) {
         .layout = result.pipeline_layout
     };
 
-    assert(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &convolution_create_pipeline_info, nullptr, &result.pipeline) == VK_SUCCESS);
+    VK_ASSERT(vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &convolution_create_pipeline_info, nullptr, &result.pipeline));
 
     return result;
 }
@@ -204,8 +210,8 @@ void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCom
         .pSetLayouts = &program.descriptor_set_layout
     };
 
-    VkDescriptorSet descriptor_set;
-    assert(vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set) == VK_SUCCESS);
+    VkDescriptorSet descriptor_set{};
+    VK_ASSERT(vkAllocateDescriptorSets(device, &descriptor_set_allocate_info, &descriptor_set));
 
     const VkDescriptorBufferInfo write_constants_info {
         .buffer = constants_buffer.buffer,
@@ -288,7 +294,7 @@ int main(int argc, char* argv[]) {
         .vulkanApiVersion = VK_API_VERSION_1_0,
     };
 
-    assert(vmaCreateAllocator(&vma_create_info, &vma_allocator) == VK_SUCCESS);
+    VK_ASSERT(vmaCreateAllocator(&vma_create_info, &vma_allocator));
     DEFER { vmaDestroyAllocator(vma_allocator); };
 
     const uint32_t compute_family_index = *device.get_queue_index(vkb::QueueType::compute);
@@ -299,7 +305,7 @@ int main(int argc, char* argv[]) {
     };
 
     VkCommandPool compute_command_pool;
-    assert(vkCreateCommandPool(device, &compute_command_pool_create_info, nullptr, &compute_command_pool) == VK_SUCCESS);
+    VK_ASSERT(vkCreateCommandPool(device, &compute_command_pool_create_info, nullptr, &compute_command_pool));
     DEFER { vkDestroyCommandPool(device, compute_command_pool, nullptr); };
 
     ComputeProgram convolution = CreateConvolutionProgram(device, "convolution.spv");
@@ -313,13 +319,15 @@ int main(int argc, char* argv[]) {
     };
 
     // Create the buffers we use to store everything
-    constexpr size_t WORK_SIZE = 1024*1024;
+    constexpr size_t WORK_SIZE = 1024*1024*128;
     TypedBuffer<float> constants_buffer = CreateUniformBuffer<float>(vma_allocator, 16);
-    DEFER { DestroyBuffer(vma_allocator, constants_buffer); };
     TypedBuffer<float> input_buffer = CreateStorageBuffer<float>(vma_allocator, WORK_SIZE);
-    DEFER { DestroyBuffer(vma_allocator, input_buffer); };
     TypedBuffer<float> output_buffer = CreateStorageBuffer<float>(vma_allocator, WORK_SIZE);
-    DEFER { DestroyBuffer(vma_allocator, output_buffer); };
+    DEFER { 
+        DestroyBuffer(vma_allocator, constants_buffer);
+        DestroyBuffer(vma_allocator, input_buffer);
+        DestroyBuffer(vma_allocator, output_buffer); 
+    };
 
     memcpy(constants_buffer.mapped_data, kernel, 16*sizeof(float));
 
@@ -328,6 +336,7 @@ int main(int argc, char* argv[]) {
     std::mt19937 random_generator(random_device());
     std::uniform_real_distribution<float> distribution(-10.0f, 10.0f);
 
+    std::printf("Making random source data\n");
     for (size_t n = 0; n < WORK_SIZE; ++n) {
         input_buffer.mapped_data[n] = distribution(random_generator);
         output_buffer.mapped_data[n] = 0.0f;
@@ -340,17 +349,17 @@ int main(int argc, char* argv[]) {
         .commandBufferCount = 1
     };
 
-    VkCommandBuffer command_buffer;
-    assert(vkAllocateCommandBuffers(device, &command_buffer_alloc_info, &command_buffer) == VK_SUCCESS);
+    VkCommandBuffer command_buffer{};
+    VK_ASSERT(vkAllocateCommandBuffers(device, &command_buffer_alloc_info, &command_buffer));
 
     const VkCommandBufferBeginInfo command_buffer_begin_info {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = 0,
     };
 
-    assert(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info) == VK_SUCCESS);
+    VK_ASSERT(vkBeginCommandBuffer(command_buffer, &command_buffer_begin_info));
     RunConvolutionProgram(convolution, device, command_buffer, constants_buffer, input_buffer, output_buffer, WORK_SIZE);
-    assert(vkEndCommandBuffer(command_buffer) == VK_SUCCESS);
+    VK_ASSERT(vkEndCommandBuffer(command_buffer));
 
     const VkSubmitInfo submit_info {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
@@ -358,12 +367,14 @@ int main(int argc, char* argv[]) {
         .pCommandBuffers = &command_buffer,
     };
 
+    const VkQueue compute_queue = *device.get_queue(vkb::QueueType::compute);
+
     std::printf("Begin compute job\n");
-
-    assert(vkQueueSubmit(*device.get_queue(vkb::QueueType::compute), 1, &submit_info, VK_NULL_HANDLE) == VK_SUCCESS);
-    vkQueueWaitIdle(*device.get_queue(vkb::QueueType::compute));
-
-    std::printf("Finished compute job\n");
+    auto start_time = std::chrono::system_clock::now();
+    VK_ASSERT(vkQueueSubmit(compute_queue, 1, &submit_info, VK_NULL_HANDLE));
+    vkQueueWaitIdle(compute_queue);
+    auto end_time = std::chrono::system_clock::now();
+    std::printf("Finished compute job in %lld ms\n" , std::chrono::duration_cast<std::chrono::milliseconds>(end_time-start_time).count());
 
     // print a bit of the middle so we can see if it did anything
     for (size_t n = 1000; n < 1000+32; ++n) {

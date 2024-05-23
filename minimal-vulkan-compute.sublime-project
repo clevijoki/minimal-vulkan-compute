@@ -12,6 +12,12 @@
 			"shell_cmd": "cmake --build build\\debug",
 			"working_dir": "$project_path",
 			"file_regex": "^(.*)[\\(:](\\d+)\\)?: (.*)"
+		},
+		{
+			"name": "Release",
+			"shell_cmd": "cmake --build build\\release",
+			"working_dir": "$project_path",
+			"file_regex": "^(.*)[\\(:](\\d+)\\)?: (.*)"
 		}
 	],	
 }
