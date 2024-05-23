@@ -48,42 +48,60 @@ VkShaderModule LoadShaderModule(VkDevice device, const char* filename) {
 }
 
 struct Buffer {
-    const VmaAllocator vma_allocator;
     VkBuffer buffer;
     VmaAllocation allocation;
-    void* mapped_data;
-
-    Buffer(VmaAllocator vma_allocator, size_t size, VkBufferUsageFlags usage)
-    : vma_allocator(vma_allocator) {
-
-        const VkBufferCreateInfo buffer_create_info {
-            .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-            .size = uint32_t(size),
-            .usage = usage,
-            .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        };
-
-        constexpr VmaAllocationCreateInfo vma_allocation_create_info {
-            .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
-            .usage =  VMA_MEMORY_USAGE_AUTO,
-        };
-
-
-        VmaAllocationInfo device_allocation_info {};
-
-        auto vk_result = vmaCreateBuffer(vma_allocator, &buffer_create_info, &vma_allocation_create_info,  &buffer, &allocation, &device_allocation_info);
-        assert(vk_result == VK_SUCCESS);
-
-        VkMemoryPropertyFlags memory_property_flags {};
-        vmaGetAllocationMemoryProperties(vma_allocator, allocation, &memory_property_flags);
-        assert(memory_property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-        mapped_data = device_allocation_info.pMappedData;
-    }
-
-    ~Buffer() {
-        vmaDestroyBuffer(vma_allocator, buffer, allocation);
-    }
 };
+
+void CreateBufferHelper(VmaAllocator vma_allocator, size_t size, VkBufferUsageFlags usage, VkBuffer& buffer, VmaAllocation& allocation, void*& mapped_data) {
+    const VkBufferCreateInfo buffer_create_info {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = uint32_t(size),
+        .usage = usage,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+
+    constexpr VmaAllocationCreateInfo vma_allocation_create_info {
+        .flags = VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT | VMA_ALLOCATION_CREATE_MAPPED_BIT,
+        .usage =  VMA_MEMORY_USAGE_AUTO,
+    };
+
+    VmaAllocationInfo device_allocation_info {};
+
+    auto vk_result = vmaCreateBuffer(vma_allocator, &buffer_create_info, &vma_allocation_create_info, &buffer, &allocation, &device_allocation_info);
+    assert(vk_result == VK_SUCCESS);
+
+    VkMemoryPropertyFlags memory_property_flags {};
+    vmaGetAllocationMemoryProperties(vma_allocator, allocation, &memory_property_flags);
+    assert(memory_property_flags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    mapped_data = device_allocation_info.pMappedData;
+}
+
+void DestroyBuffer(VmaAllocator vma_allocator, Buffer& buffer) {
+    vmaDestroyBuffer(vma_allocator, buffer.buffer, buffer.allocation);
+}
+
+template<typename T>
+struct TypedBuffer : public Buffer {
+    T* mapped_data;    
+};
+
+template<typename T>
+TypedBuffer<T> CreateUniformBuffer(VmaAllocator vma_allocator, size_t length) {
+    TypedBuffer<T> result;
+    void* data;
+    CreateBufferHelper(vma_allocator, sizeof(T)*length, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, result.buffer, result.allocation, data);
+    result.mapped_data = reinterpret_cast<T*>(data);
+    return result;
+}
+
+template<typename T>
+TypedBuffer<T> CreateStorageBuffer(VmaAllocator vma_allocator, size_t length) {
+    TypedBuffer<T> result;
+    void* data;
+    CreateBufferHelper(vma_allocator, sizeof(T)*length, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, result.buffer, result.allocation, data);
+    result.mapped_data = reinterpret_cast<T*>(data);
+    return result;
+}
 
 struct ComputeProgram {
     VkDescriptorPool descriptor_pool;
@@ -216,8 +234,7 @@ void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCom
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             .pBufferInfo = &write_constants_info
-        },
-        {
+        }, {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = descriptor_set,
             .dstBinding = 1,
@@ -225,8 +242,7 @@ void RunConvolutionProgram(const ComputeProgram& program, VkDevice device, VkCom
             .descriptorCount = 1,
             .descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
             .pBufferInfo = &write_input_info
-        },
-        {
+        }, {
             .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
             .dstSet = descriptor_set,
             .dstBinding = 2,
@@ -298,9 +314,12 @@ int main(int argc, char* argv[]) {
 
     // Create the buffers we use to store everything
     constexpr size_t WORK_SIZE = 1024*1024;
-    Buffer constants_buffer(vma_allocator, 16*sizeof(float), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-    Buffer input_buffer(vma_allocator, WORK_SIZE*sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT);
-    Buffer output_buffer(vma_allocator, WORK_SIZE*sizeof(float), VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_TRANSFER_SRC_BIT);
+    TypedBuffer<float> constants_buffer = CreateUniformBuffer<float>(vma_allocator, 16);
+    DEFER { DestroyBuffer(vma_allocator, constants_buffer); };
+    TypedBuffer<float> input_buffer = CreateStorageBuffer<float>(vma_allocator, WORK_SIZE);
+    DEFER { DestroyBuffer(vma_allocator, input_buffer); };
+    TypedBuffer<float> output_buffer = CreateStorageBuffer<float>(vma_allocator, WORK_SIZE);
+    DEFER { DestroyBuffer(vma_allocator, output_buffer); };
 
     memcpy(constants_buffer.mapped_data, kernel, 16*sizeof(float));
 
@@ -310,8 +329,8 @@ int main(int argc, char* argv[]) {
     std::uniform_real_distribution<float> distribution(-10.0f, 10.0f);
 
     for (size_t n = 0; n < WORK_SIZE; ++n) {
-        reinterpret_cast<float*>(input_buffer.mapped_data)[n] = distribution(random_generator);
-        reinterpret_cast<float*>(output_buffer.mapped_data)[n] = 0.0f;
+        input_buffer.mapped_data[n] = distribution(random_generator);
+        output_buffer.mapped_data[n] = 0.0f;
     }
 
     const VkCommandBufferAllocateInfo command_buffer_alloc_info {
@@ -348,7 +367,7 @@ int main(int argc, char* argv[]) {
 
     // print a bit of the middle so we can see if it did anything
     for (size_t n = 1000; n < 1000+32; ++n) {
-        std::printf("[%zu] = %f -> %f\n", n, reinterpret_cast<float*>(input_buffer.mapped_data)[n], reinterpret_cast<float*>(output_buffer.mapped_data)[n]);
+        std::printf("[%zu] = %f -> %f\n", n, input_buffer.mapped_data[n], reinterpret_cast<float*>(output_buffer.mapped_data)[n]);
     }
 
     vkDeviceWaitIdle(device);
